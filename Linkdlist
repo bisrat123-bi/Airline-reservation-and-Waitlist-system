@@ -1,1 +1,125 @@
+#include <iostream>
+#include <string>
+using namespace std;
 
+const int TOTAL_SEATS = 10; // Adjust as needed
+
+struct Passenger {
+    string name;
+    int seatNumber;
+};
+
+struct Node {
+    Passenger data;
+    Node* next;
+};
+
+class AirlineSystem {
+private:
+    Passenger seats[TOTAL_SEATS]; // Array for booked seats
+    Node* waitlistHead; // Linked list for waitlist
+
+public:
+    AirlineSystem() {
+        for (int i = 0; i < TOTAL_SEATS; i++) {
+            seats[i].seatNumber = -1; // -1 means the seat is available
+        }
+        waitlistHead = nullptr;
+    }
+
+    void reserveSeat(string name) {
+        for (int i = 0; i < TOTAL_SEATS; i++) {
+            if (seats[i].seatNumber == -1) { // Check for an empty seat
+                seats[i].name = name;
+                seats[i].seatNumber = i + 1;
+                cout << "Seat booked successfully! Seat Number: " << i + 1 << endl;
+                return;
+            }
+        }
+        cout << "No seats available. Adding to waitlist..." << endl;
+        addToWaitlist(name);
+    }
+
+    void addToWaitlist(string name) {
+        Node* newNode = new Node{ {name, -1}, nullptr };
+        if (!waitlistHead) {
+            waitlistHead = newNode;
+        } else {
+            Node* temp = waitlistHead;
+            while (temp->next) {
+                temp = temp->next;
+            }
+            temp->next = newNode;
+        }
+        cout << name << " added to the waitlist." << endl;
+    }
+
+    void cancelSeat(int seatNumber) {
+            if (seatNumber < 1 || seatNumber > TOTAL_SEATS || seats[seatNumber - 1].seatNumber == -1) {
+            cout << "Invalid or unbooked seat." << endl;
+            return;
+        }
+        cout << "Seat " << seatNumber << " canceled for " << seats[seatNumber - 1].name << endl;
+        seats[seatNumber - 1].seatNumber = -1;
+        seats[seatNumber - 1].name = "";
+        assignWaitlistedPassenger(seatNumber);
+    }
+
+    void assignWaitlistedPassenger(int seatNumber) {
+        if (!waitlistHead) return;
+        cout << "Assigning waitlisted passenger " << waitlistHead->data.name << " to seat " << seatNumber << endl;
+        seats[seatNumber - 1].name = waitlistHead->data.name;
+        seats[seatNumber - 1].seatNumber = seatNumber;
+        Node* temp = waitlistHead;
+        waitlistHead = waitlistHead->next;
+        delete temp;
+    }
+
+    void displaySeats() {
+        cout << "\nSeat Reservations:" << endl;
+        for (int i = 0; i < TOTAL_SEATS; i++) {
+            cout << "Seat " << i + 1 << ": " << (seats[i].seatNumber == -1 ? "Available" : seats[i].name) << endl;
+        }
+        cout << "\nWaitlist:" << endl;
+        Node* temp = waitlistHead;
+        while (temp) {
+            cout << temp->data.name << endl;
+            temp = temp->next;
+        }
+    }
+};
+
+int main() {
+    AirlineSystem airline;
+    int choice;
+    string name;
+    int seatNumber;
+
+    do {
+        cout << "\n1. Reserve Seat\n2. Cancel Seat\n3. Display Seats\n4. Exit\nEnter choice: ";
+        cin >> choice;
+
+        switch (choice) {
+            case 1:
+                cout << "Enter passenger name: ";
+                cin >> name;
+                airline.reserveSeat(name);
+                break;
+            case 2:
+                cout << "Enter seat number to cancel: ";
+                cin >> seatNumber;
+                airline.cancelSeat(seatNumber);
+                break;
+            case 3:
+                airline.displaySeats();
+                break;
+            case 4:
+                cout << "Exiting..." << endl;
+                break;
+            default:
+                cout << "Invalid choice. Try again." << endl;
+        }
+    } while (choice != 4);
+
+    return 0;
+}
