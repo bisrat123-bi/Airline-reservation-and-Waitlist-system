@@ -1,24 +1,19 @@
 #include <iostream>
 #include <string>
 using namespace std;
-
 const int TOTAL_SEATS = 10; // Adjust as needed
-
 struct Passenger {
     string name;
     int seatNumber;
 };
-
 struct Node {
     Passenger data;
     Node* next;
 };
-
 class AirlineSystem {
 private:
     Passenger seats[TOTAL_SEATS]; // Array for booked seats
     Node* waitlistHead; // Linked list for waitlist
-
 public:
     AirlineSystem() {
         for (int i = 0; i < TOTAL_SEATS; i++) {
