@@ -1,84 +1,214 @@
 #include <iostream>
 #include <string>
+#include <fstream>
+#include <sstream>
 using namespace std;
+
 const int TOTAL_SEATS = 10; // Adjust as needed
+
 struct Passenger {
     string name;
     int seatNumber;
+    int priority; // For waitlist priority
 };
+
 struct Node {
     Passenger data;
     Node* next;
 };
+
 class AirlineSystem {
 private:
     Passenger seats[TOTAL_SEATS]; // Array for booked seats
     Node* waitlistHead; // Linked list for waitlist
+
 public:
     AirlineSystem() {
         for (int i = 0; i < TOTAL_SEATS; i++) {
             seats[i].seatNumber = -1; // -1 means the seat is available
+            seats[i].priority = 0;
         }
         waitlistHead = nullptr;
     }
 
-    void reserveSeat(string name) {
+    ~AirlineSystem() {
+        // Clean up waitlist memory
+        Node* current = waitlistHead;
+        while (current) {
+            Node* next = current->next;
+            delete current;
+            current = next;
+        }
+        waitlistHead = nullptr;
+    }
+
+    void reserveSeat(string name, int priority = 0) {
         for (int i = 0; i < TOTAL_SEATS; i++) {
             if (seats[i].seatNumber == -1) { // Check for an empty seat
                 seats[i].name = name;
                 seats[i].seatNumber = i + 1;
+                seats[i].priority = priority;
                 cout << "Seat booked successfully! Seat Number: " << i + 1 << endl;
                 return;
             }
         }
         cout << "No seats available. Adding to waitlist..." << endl;
-        addToWaitlist(name);
+        addToWaitlist(name, priority);
     }
 
-    void addToWaitlist(string name) {
-        Node* newNode = new Node{ {name, -1}, nullptr };
-        if (!waitlistHead) {
+    void addToWaitlist(string name, int priority = 0) {
+        Node* newNode = new Node{ {name, -1, priority}, nullptr };
+        
+        if (!waitlistHead || waitlistHead->data.priority < priority) {
+            newNode->next = waitlistHead;
             waitlistHead = newNode;
         } else {
-            Node* temp = waitlistHead;
-            while (temp->next) {
-                temp = temp->next;
+            Node* current = waitlistHead;
+            while (current->next && current->next->data.priority >= priority) {
+                current = current->next;
             }
-            temp->next = newNode;
+            newNode->next = current->next;
+            current->next = newNode;
         }
-        cout << name << " added to the waitlist." << endl;
+        cout << name << " added to the waitlist with priority " << priority << endl;
     }
 
     void cancelSeat(int seatNumber) {
-            if (seatNumber < 1 || seatNumber > TOTAL_SEATS || seats[seatNumber - 1].seatNumber == -1) {
+        if (seatNumber < 1 || seatNumber > TOTAL_SEATS || seats[seatNumber - 1].seatNumber == -1) {
             cout << "Invalid or unbooked seat." << endl;
             return;
         }
         cout << "Seat " << seatNumber << " canceled for " << seats[seatNumber - 1].name << endl;
         seats[seatNumber - 1].seatNumber = -1;
         seats[seatNumber - 1].name = "";
+        seats[seatNumber - 1].priority = 0;
         assignWaitlistedPassenger(seatNumber);
     }
 
     void assignWaitlistedPassenger(int seatNumber) {
         if (!waitlistHead) return;
-        cout << "Assigning waitlisted passenger " << waitlistHead->data.name << " to seat " << seatNumber << endl;
+        
+        cout << "Assigning waitlisted passenger " << waitlistHead->data.name 
+             << " to seat " << seatNumber << endl;
+        
         seats[seatNumber - 1].name = waitlistHead->data.name;
         seats[seatNumber - 1].seatNumber = seatNumber;
+        seats[seatNumber - 1].priority = waitlistHead->data.priority;
+        
         Node* temp = waitlistHead;
         waitlistHead = waitlistHead->next;
         delete temp;
     }
 
+    void changeSeat(string name, int newSeatNumber) {
+        // Find passenger's current seat
+        int currentSeat = -1;
+        for (int i = 0; i < TOTAL_SEATS; i++) {
+            if (seats[i].name == name) {
+                currentSeat = i;
+                break;
+            }
+        }
+        
+        if (currentSeat == -1) {
+            cout << "Passenger not found in reservations." << endl;
+            return;
+        }
+        
+        if (newSeatNumber < 1 || newSeatNumber > TOTAL_SEATS) {
+            cout << "Invalid seat number." << endl;
+            return;
+        }
+        
+        if (seats[newSeatNumber-1].seatNumber == -1) {
+            // New seat is available
+            seats[newSeatNumber-1] = seats[currentSeat];
+            seats[currentSeat].seatNumber = -1;
+            seats[currentSeat].name = "";
+            seats[currentSeat].priority = 0;
+            cout << "Seat changed successfully to " << newSeatNumber << endl;
+        } else {
+            cout << "Requested seat is already occupied." << endl;
+        }
+    }
+
+    void saveToFile(const string& filename) {
+        ofstream outFile(filename);
+        // Save seat reservations
+        for (int i = 0; i < TOTAL_SEATS; i++) {
+            if (seats[i].seatNumber != -1) {
+                outFile << "SEAT " << seats[i].seatNumber << " " 
+                         << seats[i].priority << " " << seats[i].name << "\n";
+            }
+        }
+        // Save waitlist
+        Node* temp = waitlistHead;
+        while (temp) {
+            outFile << "WAIT " << temp->data.priority << " " << temp->data.name << "\n";
+            temp = temp->next;
+        }
+        outFile.close();
+        cout << "System state saved to " << filename << endl;
+    }
+
+    void loadFromFile(const string& filename) {
+        ifstream inFile(filename);
+        if (!inFile) {
+            cout << "Could not open file " << filename << endl;
+            return;
+        }
+        
+        // Clear current reservations
+        for (int i = 0; i < TOTAL_SEATS; i++) {
+            seats[i].seatNumber = -1;
+            seats[i].name = "";
+            seats[i].priority = 0;
+        }
+        
+        // Clear waitlist
+        while (waitlistHead) {
+            Node* temp = waitlistHead;
+            waitlistHead = waitlistHead->next;
+            delete temp;
+        }
+        
+        string line, type, name;
+        int seatNum, priority;
+        
+        while (getline(inFile, line)) {
+            istringstream iss(line);
+            iss >> type;
+            if (type == "SEAT") {
+                iss >> seatNum >> priority;
+                iss.ignore(); // Skip space
+                getline(iss, name);
+                if (seatNum >= 1 && seatNum <= TOTAL_SEATS) {
+                    seats[seatNum-1].name = name;
+                    seats[seatNum-1].seatNumber = seatNum;
+                    seats[seatNum-1].priority = priority;
+                }
+            } else if (type == "WAIT") {
+                iss >> priority;
+                iss.ignore();
+                getline(iss, name);
+                addToWaitlist(name, priority);
+            }
+        }
+        inFile.close();
+        cout << "System state loaded from " << filename << endl;
+    }
+
     void displaySeats() {
         cout << "\nSeat Reservations:" << endl;
         for (int i = 0; i < TOTAL_SEATS; i++) {
-            cout << "Seat " << i + 1 << ": " << (seats[i].seatNumber == -1 ? "Available" : seats[i].name) << endl;
+            cout << "Seat " << i + 1 << ": " 
+                 << (seats[i].seatNumber == -1 ? "Available" : seats[i].name) 
+                 << " (Priority: " << seats[i].priority << ")" << endl;
         }
         cout << "\nWaitlist:" << endl;
         Node* temp = waitlistHead;
         while (temp) {
-            cout << temp->data.name << endl;
+            cout << temp->data.name << " (Priority: " << temp->data.priority << ")" << endl;
             temp = temp->next;
         }
     }
@@ -88,17 +218,22 @@ int main() {
     AirlineSystem airline;
     int choice;
     string name;
-    int seatNumber;
+    int seatNumber, priority;
 
     do {
-        cout << "\n1. Reserve Seat\n2. Cancel Seat\n3. Display Seats\n4. Exit\nEnter choice: ";
+        cout << "\nAirline Reservation System\n";
+        cout << "1. Reserve Seat\n2. Cancel Seat\n3. Display Seats\n4. Change Seat\n";
+        cout << "5. Save to File\n6. Load from File\n7. Exit\nEnter choice: ";
         cin >> choice;
 
         switch (choice) {
             case 1:
                 cout << "Enter passenger name: ";
-                cin >> name;
-                airline.reserveSeat(name);
+                cin.ignore();
+                getline(cin, name);
+                cout << "Enter priority (0 for normal): ";
+                cin >> priority;
+                airline.reserveSeat(name, priority);
                 break;
             case 2:
                 cout << "Enter seat number to cancel: ";
@@ -109,12 +244,26 @@ int main() {
                 airline.displaySeats();
                 break;
             case 4:
+                cout << "Enter passenger name: ";
+                cin.ignore();
+                getline(cin, name);
+                cout << "Enter new seat number: ";
+                cin >> seatNumber;
+                airline.changeSeat(name, seatNumber);
+                break;
+            case 5:
+                airline.saveToFile("reservations.txt");
+                break;
+            case 6:
+                airline.loadFromFile("reservations.txt");
+                break;
+            case 7:
                 cout << "Exiting..." << endl;
                 break;
             default:
                 cout << "Invalid choice. Try again." << endl;
         }
-    } while (choice != 4);
+    } while (choice != 7);
 
     return 0;
 }
